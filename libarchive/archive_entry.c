@@ -852,8 +852,8 @@ archive_entry_copy_gname_w(struct archive_entry *entry, const wchar_t *name)
 int
 archive_entry_update_gname_utf8(struct archive_entry *entry, const char *name)
 {
-	if (archive_mstring_update_utf8(entry->archive,
-	    &entry->ae_gname, name) == 0)
+	if (archive_mstring_update_utf8_len(entry->archive,
+		&entry->ae_gname, name, name == NULL ? 0 : strlen(name)) == 0)
 		return (1);
 	if (errno == ENOMEM)
 		__archive_errx(1, "No memory");
@@ -930,8 +930,8 @@ archive_entry_update_hardlink_utf8(struct archive_entry *entry, const char *targ
 		entry->ae_set |= AE_SET_HARDLINK;
 	else
 		entry->ae_set &= ~AE_SET_HARDLINK;
-	if (archive_mstring_update_utf8(entry->archive,
-	    &entry->ae_hardlink, target) == 0)
+	if (archive_mstring_update_utf8_len(entry->archive,
+	    &entry->ae_hardlink, target, target == NULL ? 0 : strlen(target)) == 0)
 		return (1);
 	if (errno == ENOMEM)
 		__archive_errx(1, "No memory");
@@ -1075,11 +1075,11 @@ archive_entry_update_link_utf8(struct archive_entry *entry, const char *target)
 {
 	int r;
 	if (entry->ae_set & AE_SET_SYMLINK)
-		r = archive_mstring_update_utf8(entry->archive,
-		    &entry->ae_symlink, target);
+		r = archive_mstring_update_utf8_len(entry->archive,
+		    &entry->ae_symlink, target, target == NULL ? 0 : strlen(target));
 	else
-		r = archive_mstring_update_utf8(entry->archive,
-		    &entry->ae_hardlink, target);
+		r = archive_mstring_update_utf8_len(entry->archive,
+		    &entry->ae_hardlink, target, target == NULL ? 0 : strlen(target));
 	if (r == 0)
 		return (1);
 	if (errno == ENOMEM)
@@ -1152,6 +1152,12 @@ archive_entry_copy_pathname(struct archive_entry *entry, const char *name)
 }
 
 void
+archive_entry_copy_pathname_len(struct archive_entry *entry, const char *name, size_t length)
+{
+	archive_mstring_copy_mbs_len(&entry->ae_pathname, name, length);
+}
+
+void
 archive_entry_copy_pathname_w(struct archive_entry *entry, const wchar_t *name)
 {
 	archive_mstring_copy_wcs(&entry->ae_pathname, name);
@@ -1160,8 +1166,19 @@ archive_entry_copy_pathname_w(struct archive_entry *entry, const wchar_t *name)
 int
 archive_entry_update_pathname_utf8(struct archive_entry *entry, const char *name)
 {
-	if (archive_mstring_update_utf8(entry->archive,
-	    &entry->ae_pathname, name) == 0)
+	if (archive_mstring_update_utf8_len(entry->archive,
+	    &entry->ae_pathname, name, name == NULL ? 0 : strlen(name)) == 0)
+		return (1);
+	if (errno == ENOMEM)
+		__archive_errx(1, "No memory");
+	return (0);
+}
+
+int
+archive_entry_update_pathname_utf8_len(struct archive_entry *entry, const char *name, size_t length)
+{
+	if (archive_mstring_update_utf8_len(entry->archive,
+	    &entry->ae_pathname, name, length) == 0)
 		return (1);
 	if (errno == ENOMEM)
 		__archive_errx(1, "No memory");
@@ -1282,8 +1299,8 @@ archive_entry_update_symlink_utf8(struct archive_entry *entry, const char *linkn
 		entry->ae_set |= AE_SET_SYMLINK;
 	else
 		entry->ae_set &= ~AE_SET_SYMLINK;
-	if (archive_mstring_update_utf8(entry->archive,
-	    &entry->ae_symlink, linkname) == 0)
+	if (archive_mstring_update_utf8_len(entry->archive,
+	    &entry->ae_symlink, linkname, linkname == NULL ? 0 : strlen(linkname)) == 0)
 		return (1);
 	if (errno == ENOMEM)
 		__archive_errx(1, "No memory");
@@ -1339,8 +1356,8 @@ archive_entry_copy_uname_w(struct archive_entry *entry, const wchar_t *name)
 int
 archive_entry_update_uname_utf8(struct archive_entry *entry, const char *name)
 {
-	if (archive_mstring_update_utf8(entry->archive,
-	    &entry->ae_uname, name) == 0)
+	if (archive_mstring_update_utf8_len(entry->archive,
+	    &entry->ae_uname, name, name == NULL ? 0 : strlen(name)) == 0)
 		return (1);
 	if (errno == ENOMEM)
 		__archive_errx(1, "No memory");

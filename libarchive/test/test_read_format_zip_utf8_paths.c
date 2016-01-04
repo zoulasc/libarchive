@@ -26,68 +26,243 @@
 #include "test.h"
 __FBSDID("$FreeBSD$");
 
-static void
-verify(struct archive *a) {
-	struct archive_entry *ae;
-	const wchar_t *wp;
-	int file, i;
+/*
+ * This collection of tests tries to verify that libarchive correctly
+ * handles Zip UTF-8 filenames stored in various fashions, including
+ * boundary cases where the different copies of the filename don't
+ * agree with each other.
+ *
+ * A UTF8 filename can appear in a Zip file in three different fashions.
+ *
+ * Unmarked: If bit 11 of the GP bit flag is not set, then the
+ * filename is stored in an unspecified encoding which may or may not
+ * be UTF-8.  Practically speaking, decoders can make no assumptions
+ * about the filename encoding.
+ *
+ * GP bit flag #11:  If this bit is set, then the Filename and File
+ * comment should be stored in UTF-8.
+ *
+ * Extra field 0x7075: This field was added by Info-ZIP.  It stores a
+ * second copy of the filename in UTF-8.  Note this second filename
+ * may not be the same encoding -- or even the same name -- as the primary
+ * filename.  It makes no assertion about the character set used by
+ * the file comment.
+ *
+ * Also note that the above can appear in the local file header or the
+ * central directory or both and may or may not agree in any of those
+ * cases.  In the worst case, we may have four different filenames for
+ * a single entry: The local file header can have both a regular filename
+ * (in UTF-8 or not) and the 0x7075 extension, the central directory
+ * would also have both, and all four names could be different.
+ */
 
-        /*
-	 * Test file has a pattern to all names: They all have a
-	 * number followed by " - " and an accented character.  This
-	 * archive was created by Windows and has regular filenames in
-	 * some MBCS and uses the Zip 0x7075 extension to hold UTF-8
-	 * pathnames.  The code below checks that the correct
-	 * (Unicode) characters are decoded by comparing the number to
-	 * the expected accented character.
-	 */
+/*
+ * Case 1: Use GP#11 to flag UTF-8 filename in local file header,
+ * but central directory has a different name.
+ */
+static const unsigned char case1[] = {
+	/* Local file header */
+	0x50, 0x4b, 0x03, 0x04, /* PK\003\004 */
+	0x20, 0x00, /* Version needed to extract: 2.0 */
+	0x00, 0x08, /* General purpose bit flag: 0x0800 == UTF8 filename */
+	0x00, 0x00, /* Compression method: None */
+	0x00, 0x00, /* Last mod time */
+	0x00, 0x00, /* Last mod date */
+	0x00, 0x00, 0x00, 0x00, /* CRC32 */
+	0x04, 0x00, 0x00, 0x00, /* Compressed size: 4 */
+	0x04, 0x00, 0x00, 0x00, /* Uncompressed size: 4 */
+	0x0a, 0x00, /* Filename length: 5 */
+	0x00, 0x00, /* Extra field lenght: 0 */
+	0x41, 0x42, 0x43, 0xE2, 0x86, 0x92, 0x2e, 0x74, 0x78, 0x74, /* Filename: ABC<right arrow>.txt */
+	/* Extra field: Not present */
+	
+	/* File data */
+	0x41, 0x42, 0x43, 0x0a, /* "ABC\n" */
 
-	for (file = 0; file < 20; ++file) {
-		assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-		assert((wp = archive_entry_pathname_w(ae)) != NULL);
-		if (wp) {
-			for (i = 0; wp[i] != 0; ++i) {
-				if (wp[i] == '2') {
-					failure("Unicode 'o with umlaut' expected");
-					assertEqualInt(wp[i + 4], 0xF6);
-				} else if (wp[i] == '3') {
-					failure("Unicode 'a with umlaut' expected");
-					assertEqualInt(wp[i + 4], 0xE4);
-				} else if (wp[i] == '4') {
-					failure("Unicode 'a with ring' expected");
-					assertEqualInt(wp[i + 4], 0xE5);
-				}
-			}
-		}
-	}
-	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
-}
+	/* Central directory header */
+	0x50, 0x4b, 0x01, 0x02, /* PK\001\002 */
+	0x20, 0x00, /* Version made by: 2.0 for MSDOS */
+	0x20, 0x00, /* Version needed to extract: 2.0 */
+	0x00, 0x08, /* General purpose bit flag: bit 11 = UTF8 filename */
+	0x00, 0x00, /* Compression method: None */
+	0x00, 0x00, /* Last mod time */
+	0x00, 0x00, /* Last mod date */
+	0x00, 0x00, 0x00, 0x00, /* CRC32 */
+	0x04, 0x00, 0x00, 0x00, /* Compressed size: 4 */
+	0x04, 0x00, 0x00, 0x00, /* Uncompressed size: 4 */
+	0x05, 0x00, /* Filename length */
+	0x00, 0x00, /* Extra field length: 0 */
+	0x00, 0x00, /* Comment length: 0 */
+	0x00, 0x00, /* Disk number start: 0 */
+	0x00, 0x00, /* Internal file attributes */
+	0x00, 0x00, 0x00, 0x00, /* External file attributes */
+	0x00, 0x00, 0x00, 0x00, /* Offset of local header */
+	0x41, 0x2e, 0x74, 0x78, 0x74, /* File name */
+	/* Extra field: not present */
+	/* File comment: not present */
 
-DEFINE_TEST(test_read_format_zip_utf8_paths)
+	/* End of central directory record */
+	0x50, 0x4b, 0x05, 0x06, /* PK\005\006 */
+	0x00, 0x00, /* Number of this disk: 0 */
+	0x00, 0x00, /* Central directory starts on this disk: 0 */
+	0x01, 0x00, /* Total CD entries on this disk: 1 */
+	0x01, 0x00, /* Total CD entries: 1 */
+	0x33, 0x00, 0x00, 0x00, /* Size of CD in bytes */
+	0x2c, 0x00, 0x00, 0x00, /* Offset of start of CD */
+	0x00, 0x00, /* Length of archive comment: 0 */
+	/* Archive comment: not present */
+};
+
+DEFINE_TEST(test_read_format_zip_utf8_paths_case1_seeking)
 {
-	const char *refname = "test_read_format_zip_utf8_paths.zip";
 	struct archive *a;
-	char *p;
-	size_t s;
-
-	extract_reference_file(refname);
+	struct archive_entry *ae;
 
 	/* Verify with seeking reader. */
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_filename(a, refname, 10240));
-	verify(a);
+	assertEqualIntA(a, ARCHIVE_OK, read_open_memory_seek(a, case1, sizeof(case1), 7));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualString(archive_entry_pathname(ae), NULL);
+	assertEqualString(archive_entry_pathname_utf8(ae), "ABC\xe2\x86\x92.txt");
+
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_format_zip_utf8_paths_case1_streaming)
+{
+	struct archive *a;
+	struct archive_entry *ae;
 
 	/* Verify with streaming reader. */
-	p = slurpfile(&s, refname);
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, read_open_memory(a, p, s, 31));
-	verify(a);
+	assertEqualIntA(a, ARCHIVE_OK, read_open_memory(a, case1, sizeof(case1), 31));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualString(archive_entry_pathname(ae), NULL);
+	assertEqualString(archive_entry_pathname_utf8(ae), "ABC\xe2\x86\x92.txt");
+
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_free(a));
 }
+
+/*
+ * TODO: Case 2: GP#11 is used, but filename is not valid UTF-8.
+ * This should always cause an error; malformed UTF-8 should never happen.
+ */
+
+/*
+ * TODO: Case 3: Store UTF-8 filename using extra field 0x7075
+ * 0x7075 filename and regular filename have identical bytes but
+ * regular filename is not marked with GP#11 bit.
+ *
+ * Note: Central dir entry has only "A.txt" and no 0x7075 extension.
+ */
+static const unsigned char case3[] = {
+	/* Local file header */
+	0x50, 0x4b, 0x03, 0x04, /* PK\003\004 */
+	0x20, 0x00, /* Version needed to extract: 2.0 */
+	0x00, 0x00, /* General purpose bit flag: 0x0000 */
+	0x00, 0x00, /* Compression method: None */
+	0x00, 0x00, /* Last mod time */
+	0x00, 0x00, /* Last mod date */
+	0x00, 0x00, 0x00, 0x00, /* CRC32 */
+	0x04, 0x00, 0x00, 0x00, /* Compressed size: 4 */
+	0x04, 0x00, 0x00, 0x00, /* Uncompressed size: 4 */
+	0x0a, 0x00, /* Filename length: 10 */
+	0x0e, 0x00, /* Extra field length: 14 */
+	0x41, 0x42, 0x43, 0xE2, 0x86, 0x92, 0x2e, 0x74, 0x78, 0x74, /* Filename: ABC<right arrow>.txt */
+	0x75, 0x70, 0x0a, 0x00, 0x41, 0x42, 0x43, 0xE2, 0x86, 0x92, 0x2e, 0x74, 0x78, 0x74, /* Extra field: 0x7075 */
+	
+	/* File data */
+	0x41, 0x42, 0x43, 0x0a, /* "ABC\n" */
+
+	/* Central directory header */
+	0x50, 0x4b, 0x01, 0x02, /* PK\001\002 */
+	0x20, 0x00, /* Version made by: 2.0 for MSDOS */
+	0x20, 0x00, /* Version needed to extract: 2.0 */
+	0x00, 0x08, /* General purpose bit flag: bit 11 = UTF8 filename */
+	0x00, 0x00, /* Compression method: None */
+	0x00, 0x00, /* Last mod time */
+	0x00, 0x00, /* Last mod date */
+	0x00, 0x00, 0x00, 0x00, /* CRC32 */
+	0x04, 0x00, 0x00, 0x00, /* Compressed size: 4 */
+	0x04, 0x00, 0x00, 0x00, /* Uncompressed size: 4 */
+	0x05, 0x00, /* Filename length */
+	0x00, 0x00, /* Extra field length: 0 */
+	0x00, 0x00, /* Comment length: 0 */
+	0x00, 0x00, /* Disk number start: 0 */
+	0x00, 0x00, /* Internal file attributes */
+	0x00, 0x00, 0x00, 0x00, /* External file attributes */
+	0x00, 0x00, 0x00, 0x00, /* Offset of local header */
+	0x41, 0x2e, 0x74, 0x78, 0x74, /* File name */
+	/* No extra fields */
+	/* File comment: not present */
+
+	/* End of central directory record */
+	0x50, 0x4b, 0x05, 0x06, /* PK\005\006 */
+	0x00, 0x00, /* Number of this disk: 0 */
+	0x00, 0x00, /* Central directory starts on this disk: 0 */
+	0x01, 0x00, /* Total CD entries on this disk: 1 */
+	0x01, 0x00, /* Total CD entries: 1 */
+	0x33, 0x00, 0x00, 0x00, /* Size of CD in bytes */
+	0x3a, 0x00, 0x00, 0x00, /* Offset of start of CD */
+	0x00, 0x00, /* Length of archive comment: 0 */
+	/* Archive comment: not present */
+};
+
+DEFINE_TEST(test_read_format_zip_utf8_paths_case3_seeking)
+{
+	struct archive *a;
+	struct archive_entry *ae;
+
+	/* Verify with seeking reader. */
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, read_open_memory_seek(a, case3, sizeof(case3), 7));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualString(archive_entry_pathname(ae), NULL);
+	assertEqualString(archive_entry_pathname_utf8(ae), "ABC\xe2\x86\x92.txt");
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_format_zip_utf8_paths_case3_streaming)
+{
+	struct archive *a;
+	struct archive_entry *ae;
+
+	/* Verify with streaming reader. */
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, read_open_memory(a, case3, sizeof(case3), 31));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualString(archive_entry_pathname(ae), NULL);
+	assertEqualString(archive_entry_pathname_utf8(ae), "ABC\xe2\x86\x92.txt");
+
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_free(a));
+}
+
+
+/*
+ * TODO: Case 4: As with Case 3, but the two filenames are not
+ * the same.
+ */
+
+/*
+ * TODO: Case 5: GP#11 and extra field 0x7075 both used, but
+ * store different names.
+ */
+
+/*
+ * TODO: Similar cases where the local file header and central directory
+ * disagree.  Seeking reader should always use the CD version, streaming
+ * reader must necessarily always use the local file header version.
+ */

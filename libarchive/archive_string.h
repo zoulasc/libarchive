@@ -233,7 +233,7 @@ int	archive_mstring_copy_wcs_len(struct archive_mstring *,
 	    const wchar_t *wcs, size_t);
 int	archive_mstring_copy_mbs_len_l(struct archive_mstring *,
 	    const char *mbs, size_t, struct archive_string_conv *);
-int     archive_mstring_update_utf8(struct archive *, struct archive_mstring *aes, const char *utf8);
+int     archive_mstring_update_utf8_len(struct archive *, struct archive_mstring *aes, const char *utf8, size_t length);
 
 
 #endif

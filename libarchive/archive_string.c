@@ -4152,8 +4152,8 @@ archive_mstring_copy_mbs_len_l(struct archive_mstring *aes,
  * usable values even if some of the character conversions are failing.)
  */
 int
-archive_mstring_update_utf8(struct archive *a, struct archive_mstring *aes,
-    const char *utf8)
+archive_mstring_update_utf8_len(struct archive *a, struct archive_mstring *aes,
+    const char *utf8, size_t length)
 {
 	struct archive_string_conv *sc;
 	int r;
@@ -4164,7 +4164,7 @@ archive_mstring_update_utf8(struct archive *a, struct archive_mstring *aes,
 	}
 
 	/* Save the UTF8 string. */
-	archive_strcpy(&(aes->aes_utf8), utf8);
+	archive_strncpy(&(aes->aes_utf8), utf8, length);
 
 	/* Empty the mbs and wcs strings. */
 	archive_string_empty(&(aes->aes_mbs));
@@ -4176,7 +4176,7 @@ archive_mstring_update_utf8(struct archive *a, struct archive_mstring *aes,
 	sc = archive_string_conversion_from_charset(a, "UTF-8", 1);
 	if (sc == NULL)
 		return (-1);/* Couldn't allocate memory for sc. */
-	r = archive_strcpy_l(&(aes->aes_mbs), utf8, sc);
+	r = archive_strncpy_l(&(aes->aes_mbs), utf8, length, sc);
 	if (a == NULL)
 		free_sconv_object(sc);
 	if (r != 0)

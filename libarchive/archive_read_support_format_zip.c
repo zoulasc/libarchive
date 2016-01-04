@@ -410,7 +410,7 @@ zip_time(const char *p)
  *  triplets.  id and size are 2 bytes each.
  */
 static void
-process_extra(const char *p, size_t extra_length, struct zip_entry* zip_entry)
+process_extra(const char *p, size_t extra_length, struct zip_entry* zip_entry, struct archive_entry *entry)
 {
 	unsigned offset = 0;
 
@@ -626,6 +626,11 @@ process_extra(const char *p, size_t extra_length, struct zip_entry* zip_entry)
 			}
 			break;
 		}
+		case 0x7075:
+			if (entry != NULL) {
+				archive_entry_update_pathname_utf8_len(entry, p + offset, datasize);
+			}
+			break;
 		case 0x7855:
 			/* Info-ZIP Unix Extra Field (type 2) "Ux". */
 #ifdef DEBUG
@@ -780,33 +785,27 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 		return (ARCHIVE_FATAL);
 	}
 	if (zip_entry->zip_flags & ZIP_UTF8_NAME) {
-		/* The filename is stored to be UTF-8. */
-		if (zip->sconv_utf8 == NULL) {
-			zip->sconv_utf8 =
-			    archive_string_conversion_from_charset(
-				&a->archive, "UTF-8", 1);
-			if (zip->sconv_utf8 == NULL)
-				return (ARCHIVE_FATAL);
-		}
-		sconv = zip->sconv_utf8;
-	} else if (zip->sconv != NULL)
-		sconv = zip->sconv;
-	else
-		sconv = zip->sconv_default;
+		archive_entry_update_pathname_utf8_len(entry, h, filename_length);
+	} else {
+		if (zip->sconv != NULL)
+			sconv = zip->sconv;
+		else
+			sconv = zip->sconv_default;
 
-	if (archive_entry_copy_pathname_l(entry,
-	    h, filename_length, sconv) != 0) {
-		if (errno == ENOMEM) {
-			archive_set_error(&a->archive, ENOMEM,
-			    "Can't allocate memory for Pathname");
-			return (ARCHIVE_FATAL);
+		if (archive_entry_copy_pathname_l(entry,
+			h, filename_length, sconv) != 0) {
+			if (errno == ENOMEM) {
+				archive_set_error(&a->archive, ENOMEM,
+				    "Can't allocate memory for Pathname");
+				return (ARCHIVE_FATAL);
+			}
+			archive_set_error(&a->archive,
+			    ARCHIVE_ERRNO_FILE_FORMAT,
+			    "Pathname cannot be converted "
+			    "from %s to current locale.",
+			    archive_string_conversion_charset_name(sconv));
+			ret = ARCHIVE_WARN;
 		}
-		archive_set_error(&a->archive,
-		    ARCHIVE_ERRNO_FILE_FORMAT,
-		    "Pathname cannot be converted "
-		    "from %s to current locale.",
-		    archive_string_conversion_charset_name(sconv));
-		ret = ARCHIVE_WARN;
 	}
 	__archive_read_consume(a, filename_length);
 
@@ -850,7 +849,7 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 		return (ARCHIVE_FATAL);
 	}
 
-	process_extra(h, extra_length, zip_entry);
+	process_extra(h, extra_length, zip_entry, entry);
 	__archive_read_consume(a, extra_length);
 
 	if (zip_entry->flags & LA_FROM_CENTRAL_DIRECTORY) {
@@ -2630,7 +2629,7 @@ slurp_central_directory(struct archive_read *a, struct zip *zip)
 			    "Truncated ZIP file header");
 			return ARCHIVE_FATAL;
 		}
-		process_extra(p + filename_length, extra_length, zip_entry);
+		process_extra(p + filename_length, extra_length, zip_entry, NULL);
 
 		/*
 		 * Mac resource fork files are stored under the
