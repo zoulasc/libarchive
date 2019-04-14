@@ -99,6 +99,7 @@ The library also detects and handles any of the following before evaluating the 
   * lz4 compression
   * lzop compression
   * zstandard compression
+  * Android adb backup files
 
 The library can create archives in any of the following formats:
   * POSIX ustar
