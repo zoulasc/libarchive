@@ -454,6 +454,7 @@ main(int argc, char **argv)
 			/* GNU tar 1.13  used -l for --one-file-system */
 			bsdtar->flags |= OPTFLAG_WARN_LINKS;
 			break;
+		case OPTION_AB:
 		case OPTION_LRZIP:
 		case OPTION_LZ4:
 		case OPTION_LZIP: /* GNU tar beginning with 1.23 */
@@ -466,6 +467,7 @@ main(int argc, char **argv)
 				    compression);
 			compression = opt;
 			switch (opt) {
+			case OPTION_AB: compression_name = "ab"; break;
 			case OPTION_LRZIP: compression_name = "lrzip"; break;
 			case OPTION_LZ4:  compression_name = "lz4"; break;
 			case OPTION_LZIP: compression_name = "lzip"; break;
