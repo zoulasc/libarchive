@@ -76,7 +76,8 @@ static inline char* getnextline(const char* str)
 	return (nline == NULL) ? NULL : (nline + 1);
 }
 
-static int read_str_ahead(struct archive_read_filter* readfilter, char* buffer, size_t len)
+static int read_str_ahead(struct archive_read_filter* readfilter, char* buffer,
+    size_t len)
 {
 	const void* ptr = __archive_read_filter_ahead(readfilter, len, NULL);
 	if(ptr == NULL)
@@ -88,9 +89,10 @@ static int read_str_ahead(struct archive_read_filter* readfilter, char* buffer, 
 	return 0;
 }
 
-static char* parse_ab_header(const char* header, enum AB_HEADER_FIELD field)
+static const char* parse_ab_header(const char* header,
+    enum AB_HEADER_FIELD field)
 {
-	char* l = (char*)header;
+	const char* l = header;
 	enum AB_HEADER_FIELD curfield = AB_HEADER_MAGIC;
 
 	do
@@ -102,7 +104,8 @@ static char* parse_ab_header(const char* header, enum AB_HEADER_FIELD field)
 	return NULL;
 }
 
-static int ab_reader_bid(struct archive_read_filter_bidder* self, struct archive_read_filter* filter)
+static int ab_reader_bid(struct archive_read_filter_bidder* self,
+    struct archive_read_filter* filter)
 {
 	char h[64];
 	char* l = h;
@@ -113,12 +116,13 @@ static int ab_reader_bid(struct archive_read_filter_bidder* self, struct archive
 	if(read_str_ahead(filter, h, 64) != 0)
 		return 0;
 
-	if(memcmp(AB_MAGIC, h, strlen(AB_MAGIC)) != 0)
+	if(strcmp(AB_MAGIC, h) != 0)
 		return 0;
 
 	if((l = getnextline(h)) == NULL)
 		return 0;
 
+	/* TODO: version 4+ */
 	/* version 1 to 3 supported */
 	if(l[0] < '1' || l[0] > '3')
 		return 0;
@@ -133,8 +137,8 @@ static int ab_reader_bid(struct archive_read_filter_bidder* self, struct archive
 	if((l = getnextline(l)) == NULL)
 		return 0;
 
-	/* encryption method none or AES-256 (not supported) */
-	if(memcmp(l, "none", 4) != 0)
+	/* TODO: AES-256 */
+	if(strcmp(l, "none") != 0)
 		return 0;
 
 	if((l = getnextline(l)) == NULL)
@@ -143,7 +147,8 @@ static int ab_reader_bid(struct archive_read_filter_bidder* self, struct archive
 	return ((l - h) << 3);
 }
 
-static inline ssize_t ab_filter_read_raw(struct archive_read_filter* self, const void** p)
+static inline ssize_t ab_filter_read_raw(struct archive_read_filter* self,
+    const void** p)
 {
 	const void* data;
 	ssize_t datalen;
@@ -166,7 +171,8 @@ static inline int ab_zlib_init(struct archive_read_filter* self)
 	state = (struct private_data*)self->data;
 	ssize_t avail = 0;
 
-	state->stream.next_in = (Bytef*)__archive_read_filter_ahead(self->upstream, 1, &avail);
+	state->stream.next_in = (Bytef*)__archive_read_filter_ahead(
+	    self->upstream, 1, &avail);
 	state->stream.avail_in = (uInt)avail;
 	ret = inflateInit2(&(state->stream), 0);
 
@@ -229,7 +235,8 @@ static inline int ab_zlib_destroy(struct archive_read_filter* self)
 }
 
 /* based on gzip_filter_read */
-static inline ssize_t ab_filter_read_deflate(struct archive_read_filter* self, const void** p)
+static inline ssize_t ab_filter_read_deflate(struct archive_read_filter* self,
+    const void** p)
 {
 #if HAVE_ZLIB_H
 	struct private_data* state;
@@ -247,7 +254,8 @@ static inline ssize_t ab_filter_read_deflate(struct archive_read_filter* self, c
 	while (state->stream.avail_out > 0 && !state->eof)
 	{
 		/* Peek at the next available data. */
-		state->stream.next_in = (Bytef*)__archive_read_filter_ahead(self->upstream, 1, &avail_in);
+		state->stream.next_in = (Bytef*)__archive_read_filter_ahead(
+		    self->upstream, 1, &avail_in);
 		if (state->stream.next_in == NULL) {
 			archive_set_error(&self->archive->archive,
 			    ARCHIVE_ERRNO_MISC,
@@ -299,13 +307,14 @@ static inline ssize_t ab_filter_read_deflate(struct archive_read_filter* self, c
 static inline int consume_header(struct archive_read_filter* self)
 {
 	char h[64];
-	char* l = h;
+	const char* l = h;
 
 	/* determine header length */
-	if(read_str_ahead(self->upstream, h, 64) != 0 || (l = parse_ab_header(h, AB_HEADER_END)) == NULL)
+	if(read_str_ahead(self->upstream, h, 64) != 0 || (l = parse_ab_header(
+	    h, AB_HEADER_END)) == NULL)
 	{
 		archive_set_error(&self->archive->archive, ARCHIVE_ERRNO_MISC,
-			"ab: reading failed");
+		    "ab: reading failed");
 		return ARCHIVE_FATAL;
 	}
 
@@ -388,7 +397,7 @@ static int ab_reader_init(struct archive_read_filter* self)
 	state = (struct private_data*)calloc(1, sizeof(*state));
 #if HAVE_ZLIB_H
 	out_block = malloc(out_block_size);
-	if (state == NULL || out_block == NULL) 
+	if (state == NULL || out_block == NULL)
 	{
 		free(out_block);
 #else
@@ -410,8 +419,8 @@ static int ab_reader_init(struct archive_read_filter* self)
 
 	self->data = state;
 	{
-		char* ver = parse_ab_header(h, AB_HEADER_VERSION);
-		char* comp = parse_ab_header(h, AB_HEADER_COMPRESSION);
+		const char* ver = parse_ab_header(h, AB_HEADER_VERSION);
+		const char* comp = parse_ab_header(h, AB_HEADER_COMPRESSION);
 		if(!ver || !comp)
 		{
 			archive_set_error(&self->archive->archive, ARCHIVE_ERRNO_MISC,

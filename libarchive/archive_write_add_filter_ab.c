@@ -73,7 +73,8 @@ static inline int write_ab_header(struct archive_write_filter* f)
 	size_t bw;
 	int ret;
 
-	bw = snprintf(buffer, sizeof(buffer), "%s\n%d\n%d\n%s\n", AB_MAGIC, data->version, (data->compression_level ? 1 : 0), "none");
+	bw = snprintf(buffer, sizeof(buffer), "%s\n%d\n%d\n%s\n", AB_MAGIC,
+	    data->version, (data->compression_level ? 1 : 0), "none");
 	if(bw > sizeof(buffer) - 1)
 		bw = sizeof(buffer) - 1;
 
@@ -85,20 +86,24 @@ static inline int write_ab_header(struct archive_write_filter* f)
 	return ARCHIVE_OK;
 }
 
-static int archive_write_ab_options(struct archive_write_filter* f, const char* key, const char* value)
+static int archive_write_ab_options(struct archive_write_filter* f,
+    const char* key, const char* value)
 {
 	struct private_data* data = (struct private_data*)f->data;
 	int val = 0;
 
 	if (strcmp(key, "compression-level") == 0)
 	{
-		if (value == NULL || !((val = value[0] - '0') >= 0 && val <= 9) || value[1] != '\0')
+		if (value == NULL || !((val = value[0] - '0') >= 0 && val <= 9)
+		    || value[1] != '\0') {
 			return ARCHIVE_WARN;
+		}
 
 #if !(HAVE_ZLIB_H)
 		if(val != 0)
 		{
-			archive_set_error(f->archive, ARCHIVE_ERRNO_PROGRAMMER, "ab: DEFLATE compression not supported in this build");
+			archive_set_error(f->archive, ARCHIVE_ERRNO_PROGRAMMER,
+			    "ab: DEFLATE compression is not supported");
 			return ARCHIVE_FATAL;
 		}
 #endif
@@ -107,10 +112,12 @@ static int archive_write_ab_options(struct archive_write_filter* f, const char* 
 		return ARCHIVE_OK;
 	}
 
-	if (strcmp(key, "version") == 0) 
+	if (strcmp(key, "version") == 0)
 	{
-		if (value == NULL || !((val = value[0] - '0') >= 1 && val <= 3) || value[1] != '\0')
+		if (value == NULL || !((val = value[0] - '0') >= 1 && val <= 3)
+		    || value[1] != '\0') {
 			return ARCHIVE_WARN;
+		}
 
 		data->version = val;
 		return ARCHIVE_OK;
@@ -124,15 +131,17 @@ static int archive_write_ab_options(struct archive_write_filter* f, const char* 
 
 #if HAVE_ZLIB_H
 /* based on drive_compressor from archive_write_add_filter_gzip.c */
-static int drive_compressor(struct archive_write_filter* f, struct private_data* data, int finishing)
+static int drive_compressor(struct archive_write_filter* f,
+    struct private_data* data, int finishing)
 {
 	int ret;
 
-	for (;;) 
+	for (;;)
 	{
-		if (data->stream.avail_out == 0) 
+		if (data->stream.avail_out == 0)
 		{
-			ret = __archive_write_filter(f->next_filter, data->out_block, data->out_block_size);
+			ret = __archive_write_filter(f->next_filter,
+			    data->out_block, data->out_block_size);
 			if (ret != ARCHIVE_OK)
 				return ARCHIVE_FATAL;
 			data->stream.next_out = data->out_block;
@@ -146,7 +155,7 @@ static int drive_compressor(struct archive_write_filter* f, struct private_data*
 		ret = deflate(&(data->stream),
 		    finishing ? Z_FINISH : Z_NO_FLUSH );
 
-		switch (ret) 
+		switch (ret)
 		{
 		case Z_OK:
 			/* In non-finishing case, check if compressor
@@ -162,15 +171,16 @@ static int drive_compressor(struct archive_write_filter* f, struct private_data*
 		default:
 			/* Any other return value indicates an error. */
 			archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
-			    "DEFLATE compression failed: deflate() call returned status %d",
-			    ret);
+			    "DEFLATE compression failed: "
+			    "deflate() call returned status %d", ret);
 			return ARCHIVE_FATAL;
 		}
 	}
 }
 #endif
 
-static inline int archive_write_ab_write_deflate(struct archive_write_filter* f, const void* buff, size_t length)
+static inline int archive_write_ab_write_deflate(
+    struct archive_write_filter* f, const void* buff, size_t length)
 {
 #if HAVE_ZLIB_H
 	struct private_data* data = (struct private_data*)f->data;
@@ -192,12 +202,14 @@ static inline int archive_write_ab_write_deflate(struct archive_write_filter* f,
 #endif
 }
 
-static inline int archive_write_ab_write_raw(struct archive_write_filter* f, const void* buff, size_t length)
+static inline int archive_write_ab_write_raw(struct archive_write_filter* f,
+    const void* buff, size_t length)
 {
 	return __archive_write_filter(f->next_filter, buff, length);
 }
 
-static int archive_write_ab_write(struct archive_write_filter* f, const void* buff, size_t length)
+static int archive_write_ab_write(struct archive_write_filter* f,
+    const void* buff, size_t length)
 {
 	struct private_data* data = (struct private_data*)f->data;
 
@@ -224,14 +236,15 @@ static int archive_write_ab_open(struct archive_write_filter* f)
 #if HAVE_ZLIB_H
 	if(data->compression_level)
 	{
-		if (data->out_block == NULL) 
+		if (data->out_block == NULL)
 		{
 			size_t bs = 65536, bpb;
-			if (f->archive->magic == ARCHIVE_WRITE_MAGIC) 
+			if (f->archive->magic == ARCHIVE_WRITE_MAGIC)
 			{
 				/* Buffer size should be a multiple number of
 				 * the of bytes per block for performance. */
-				bpb = archive_write_get_bytes_per_block(f->archive);
+				bpb = archive_write_get_bytes_per_block(
+				    f->archive);
 				if (bpb > bs)
 					bs = bpb;
 				else if (bpb != 0)
@@ -243,7 +256,8 @@ static int archive_write_ab_open(struct archive_write_filter* f)
 			if (data->out_block == NULL)
 			{
 				archive_set_error(f->archive, ENOMEM,
-					"Can't allocate data for compression buffer");
+				    "Can't allocate data "
+				    "for compression buffer");
 				return ARCHIVE_FATAL;
 			}
 		}
@@ -253,32 +267,39 @@ static int archive_write_ab_open(struct archive_write_filter* f)
 
 		/* Initialize compression library. */
 		ret = deflateInit2(&(data->stream),
-			((data->compression_level == (char)Z_DEFAULT_COMPRESSION) ? Z_DEFAULT_COMPRESSION : data->compression_level),
-			Z_DEFLATED,
-			15,
-			8,
-			Z_DEFAULT_STRATEGY);
+		    ((data->compression_level ==
+		    (char)Z_DEFAULT_COMPRESSION) ? Z_DEFAULT_COMPRESSION :
+		    data->compression_level),
+		    Z_DEFLATED,
+		    15,
+		    8,
+		    Z_DEFAULT_STRATEGY);
 
 		if (ret == Z_OK)
 			goto End;
 
 		/* Library setup failed: clean up. */
-		archive_set_error(f->archive, ARCHIVE_ERRNO_MISC, "Internal error initializing zlib compression library");
+		archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
+		    "Internal error initializing zlib compression library");
 
-		/* Override the error message if we know what really went wrong. */
+		/* Override the error message if we know what really went
+		 * wrong. */
 		switch (ret)
 		{
 		case Z_STREAM_ERROR:
 			archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
-				"Internal error initializing zlib compression library: invalid setup parameter");
+			    "Internal error initializing zlib compression "
+			    "library: invalid setup parameter");
 			break;
 		case Z_MEM_ERROR:
 			archive_set_error(f->archive, ENOMEM,
-				"Internal error initializing zlib compression library");
+			    "Internal error initializing zlib compression "
+			    "library");
 			break;
 		case Z_VERSION_ERROR:
 			archive_set_error(f->archive, ARCHIVE_ERRNO_MISC,
-				"Internal error initializing zlib compression library: invalid library version");
+			    "Internal error initializing zlib compression "
+			    "library: invalid library version");
 			break;
 		}
 
@@ -302,12 +323,12 @@ static int archive_write_ab_close(struct archive_write_filter* f)
 	{
 		/* Finish compression cycle */
 		ret = drive_compressor(f, data, 1);
-		if (ret == ARCHIVE_OK) 
+		if (ret == ARCHIVE_OK)
 		{
 			/* Write the last compressed data. */
 			ret = __archive_write_filter(f->next_filter,
-				data->out_block,
-				data->out_block_size - data->stream.avail_out);
+			    data->out_block,
+			    data->out_block_size - data->stream.avail_out);
 		}
 
 		switch (deflateEnd(&(data->stream)))
@@ -322,7 +343,7 @@ static int archive_write_ab_close(struct archive_write_filter* f)
 	}
 #endif
 	r1 = __archive_write_close_filter(f->next_filter);
-		return (r1 < ret ? r1 : ret);
+	return (r1 < ret ? r1 : ret);
 }
 
 static int archive_write_ab_free(struct archive_write_filter* f)
