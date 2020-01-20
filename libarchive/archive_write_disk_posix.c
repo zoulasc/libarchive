@@ -356,6 +356,7 @@ struct archive_write_disk {
 
 
 static int	la_opendirat(int, const char *);
+static int	la_mktemp(struct archive_write_disk *);
 static void	fsobj_error(int *, struct archive_string *, int, const char *,
 		    const char *);
 static int	check_symlinks_fsobj(char *, int *, struct archive_string *,
